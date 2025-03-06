@@ -29,9 +29,9 @@ class LockManager(LockBase):
                     continue
 
                 payload: dict = json.loads(message["data"])
-                await handlers[payload["action"]](payload, data=message["data"])
+                await handlers[payload["action"]](payload)
 
-    async def _handle_acquire(self, payload: dict, data: bytes) -> None:
+    async def _handle_acquire(self, payload: dict) -> None:
         if not self._current:
             self._current = payload
             await self._client.publish(
@@ -40,7 +40,7 @@ class LockManager(LockBase):
         else:
             self._queue.append(payload)
 
-    async def _handle_release(self, payload: dict, **kwargs) -> None:
+    async def _handle_release(self, payload: dict) -> None:
         if payload["name"] == self._current.get("name"):
             try:
                 self._current = self._queue.popleft()
