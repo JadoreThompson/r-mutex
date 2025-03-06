@@ -1,6 +1,8 @@
 ### **Overview**
 A distributed asynchronous lock built on top of the Redis PubSub, Get and Set methods. This takes inspiration from the asyncio Lock whereby futures are used instead of the polling done by the multiprocessing Lock.
 
+It's free to be built upon locally for your needs. Optionally you can do `pip install r-mutex`
+
 ### **Requirements**
 - Redis
 - Python 3.12.6
