@@ -1,5 +1,5 @@
-from .lock import Lock
+from .client import LockClient
 from .manager import LockManager
 from .base import LockBase
 
-__all__ =["Lock", "LockManager", "LockBase"]
+__all__ = ["LockClient", "LockManager", "LockBase"]

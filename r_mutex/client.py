@@ -7,7 +7,7 @@ from .manager import LockManager
 from .base import LockBase
 
 
-class Lock(LockBase):
+class LockClient(LockBase):
     def __init__(
         self, client: Redis, key: str, is_manager: bool = True, timeout: float = 1.0
     ) -> None:
@@ -43,12 +43,12 @@ class Lock(LockBase):
 
     async def acquire(self):
         payload = {"name": str(uuid4()), "action": "acquire"}
+        fut = self._waiters.setdefault(
+            payload["name"], asyncio.get_running_loop().create_future()
+        )
         await self.client.publish(
             self._broadcast_key,
             json.dumps(payload),
-        )
-        fut = self._waiters.setdefault(
-            payload["name"], asyncio.get_running_loop().create_future()
         )
 
         await fut
@@ -60,7 +60,6 @@ class Lock(LockBase):
     async def _release(self) -> None:
         await asyncio.sleep(self._timeout)
         await self.__aexit__()
-        # await self.release()
 
     async def __aenter__(self):
         self._payload = await self.acquire()
