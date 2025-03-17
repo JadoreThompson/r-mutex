@@ -13,7 +13,7 @@ class LockManager(LockBase):
     def __init__(self, client: Redis, key) -> None:
         super().__init__(client, key)
         self._queue = deque()
-        self._current: dict = {}
+        self._current: str = None
         self._is_running: bool = False
 
     async def run(self) -> None:
@@ -21,9 +21,10 @@ class LockManager(LockBase):
             "acquire": self._handle_acquire,
             "release": self._handle_release,
         }
-
+        
         async with self._client.pubsub() as ps:
             await ps.subscribe(self._broadcast_key)
+            self._is_running = True
             async for message in ps.listen():
                 if message["type"] == "subscribe":
                     continue
@@ -33,7 +34,7 @@ class LockManager(LockBase):
 
     async def _handle_acquire(self, payload: dict) -> None:
         if not self._current:
-            self._current = payload
+            self._current = payload['name']
             await self._client.publish(
                 self._receiver_key, json.dumps({"name": payload["name"]})
             )
@@ -41,14 +42,14 @@ class LockManager(LockBase):
             self._queue.append(payload)
 
     async def _handle_release(self, payload: dict) -> None:
-        if payload["name"] == self._current.get("name"):
+        if payload["name"] == self._current or '-':
             try:
-                self._current = self._queue.popleft()
+                self._current = self._queue.popleft()['name']
             except IndexError:
-                self._current = {}
+                self._current = None
 
             await self._client.publish(
-                self._receiver_key, json.dumps({"name": self._current.get("name", "-")})
+                self._receiver_key, json.dumps({"name": self._current or "-"})
             )
     
     @property

@@ -8,12 +8,16 @@ from .base import LockBase
 
 
 class Lock(LockBase):
-    def __init__(self, client: Redis, key: str, is_manager: bool = True) -> None:
+    def __init__(
+        self, client: Redis, key: str, is_manager: bool = True, timeout: float = 1.0
+    ) -> None:
         super().__init__(client, key)
         self._is_manager = is_manager
         self._waiters: dict[str, asyncio.Future] = {}
         self._msg_queue = []
         self._msg_queue_index = 0
+        self._timeout = timeout
+        self._task: asyncio.Task = None
 
         if is_manager:
             self._manager = LockManager(client, key)
@@ -29,9 +33,10 @@ class Lock(LockBase):
 
             async for message in ps.listen():
                 if message["type"] == "subscribe":
-                    continue                
-                
-                name = json.loads(message['data']).get('name')
+                    continue
+
+                name = json.loads(message["data"]).get("name")
+
                 if name in self._waiters:
                     fut = self._waiters.pop(name)
                     fut.set_result(True)
@@ -42,8 +47,9 @@ class Lock(LockBase):
             self._broadcast_key,
             json.dumps(payload),
         )
-        fut = asyncio.get_running_loop().create_future()
-        self._waiters[payload['name']] = fut
+        fut = self._waiters.setdefault(
+            payload["name"], asyncio.get_running_loop().create_future()
+        )
 
         await fut
         return payload
@@ -51,14 +57,21 @@ class Lock(LockBase):
     async def release(self):
         await self.client.publish(self._broadcast_key, json.dumps(self._payload))
 
+    async def _release(self) -> None:
+        await asyncio.sleep(self._timeout)
+        await self.__aexit__()
+        # await self.release()
+
     async def __aenter__(self):
         self._payload = await self.acquire()
+        self._task = asyncio.create_task(self._release())
         return True
 
-    async def __aexit__(self, exc_type, exc_value, tcb):
+    async def __aexit__(self, exc_type=None, exc_value=None, tcb=None):
+        self._task.cancel()
         self._payload["action"] = "release"
         await self.release()
-        
+
     @property
     def client(self):
         return self._client
@@ -70,7 +83,7 @@ class Lock(LockBase):
     @property
     def manager(self):
         if self._is_manager:
-            return self._manager    
+            return self._manager
 
     @property
     def key(self):
